@@ -1,2 +1,5 @@
 .llm_cache
 data/raw
+outputs/
+__pycache__/
+*.pyc
