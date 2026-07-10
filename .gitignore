@@ -1,5 +1,6 @@
-.llm_cache
-data/raw
-outputs/
+# local LLM response/judgment caches (one subdir per backend)
+.llm_cache/
+# raw Reddit Mental Health dataset (large)
+data/raw/
 __pycache__/
 *.pyc

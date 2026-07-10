@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
 from tqdm.auto import tqdm
 
-from ..llm import LLMClient
+from ..llm import LLMClient, judge_client
 from ..stats import risk_ratio, chi2_p
 from ..visual import annotated_heatmap
 from .scenarios import build_prompt_df, ROLES, INTENTS
@@ -27,8 +27,9 @@ def generate_responses(cfg, prompts_df, client):
     return responses_df
 
 
-def judge_responses(cfg, responses_df, client):
-    recs = [client.judge_json(J.JUDGE_SYSTEM, J.judge_prompt(r.role, r.intent, r.prompt, r.response), J.JUDGE_SCHEMA)
+def judge_responses(cfg, responses_df, judge=None):
+    judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: Mistral-7B)
+    recs = [judge.judge_json(J.JUDGE_SYSTEM, J.judge_prompt(r.role, r.intent, r.prompt, r.response), J.JUDGE_SCHEMA)
             for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging")]
     scored = pd.concat([responses_df.reset_index(drop=True), pd.DataFrame(recs)], axis=1)
     scored["harmful"] = scored["harmful"].astype(int)
@@ -171,7 +172,7 @@ def run(cfg, client=None, show=False):
     client = client or LLMClient(cfg.llm)
     prompts_df = build_prompt_df(cfg)
     responses = generate_responses(cfg, prompts_df, client)
-    scored = judge_responses(cfg, responses, client)
+    scored = judge_responses(cfg, responses)
     A = analyze(cfg, scored)
     make_plots(cfg, scored, A, show=show)
     save_results(cfg, scored, A)

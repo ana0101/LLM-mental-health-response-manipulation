@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 
-from ..llm import LLMClient
+from ..llm import LLMClient, judge_client
 from ..text import load_vader, lexical_metrics
 from ..stats import cohen_d_paired, paired_pvalues
 from ..visual import annotated_heatmap
@@ -30,9 +30,11 @@ def generate_responses(cfg, sample_df, client):
     return pd.DataFrame(rows)
 
 
-def judge_responses(cfg, responses_df, sample_df, client):
+def judge_responses(cfg, responses_df, sample_df, judge=None):
     posts = dict(zip(sample_df.post_id, sample_df.post_clean))
-    recs = [client.judge_json(J.JUDGE_SYSTEM, J.judge_prompt(posts[r.post_id], r.response), J.JUDGE_SCHEMA)
+    judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: Mistral-7B)
+    judge_system, judge_schema = J.spec(cfg.judge_llm.backend)
+    recs = [judge.judge_json(judge_system, J.judge_prompt(posts[r.post_id], r.response), judge_schema)
             for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging")]
     return pd.concat([responses_df.reset_index(drop=True), pd.DataFrame(recs)], axis=1)
 
@@ -176,7 +178,7 @@ def run(cfg, client=None, show=False):
     client = client or LLMClient(cfg.llm)
     sample = load_sample(cfg)
     responses = generate_responses(cfg, sample, client)
-    scored = add_automated_metrics(judge_responses(cfg, responses, sample, client))
+    scored = add_automated_metrics(judge_responses(cfg, responses, sample))
     A = analyze(cfg, scored)
     make_plots(cfg, scored, A, show=show)
     save_results(cfg, scored, A)
