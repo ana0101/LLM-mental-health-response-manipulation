@@ -5,9 +5,22 @@ import pandas as pd
 
 from ..text import scrub
 
+try:
+    from ftfy import fix_text as _fix_text  # repairs mojibake from mixed-encoding files
+except ImportError:  # fallback: fix the most common UTF-8-read-as-cp1252 punctuation
+    _MOJIBAKE = {"â€™": "’", "â€˜": "‘", "â€œ": "“", "â€\x9d": "”",
+                 "â€”": "—", "â€“": "–", "â€¦": "…", "Â": ""}
+
+    def _fix_text(text):
+        text = str(text)
+        for bad, good in _MOJIBAKE.items():
+            text = text.replace(bad, good)
+        return text
+
 USECOLS = ["subreddit", "author", "date", "post", "n_words", "sent_compound",
            "suicidality_total", "isolation_total", "substance_use_total"]
 DELETED = {"[deleted]", "[removed]", "", "nan", "none"}
+EN_DATASET = "data/EN_dataset.csv"  # curated set (same schema as data/raw); used by load_sample
 
 
 def _find_file(sub, timeframe, data_dir):
@@ -69,5 +82,24 @@ def stratified_sample(cfg, filtered_df):
 
 
 def load_sample(cfg):
-    """Convenience: raw -> filtered -> stratified sample."""
-    return stratified_sample(cfg, filter_posts(cfg, load_raw(cfg)))
+    """Return *all* posts from ``EN_DATASET`` (data/EN_dataset.csv) in the sampling
+    format the pipeline expects. No random selection -- every post is returned, so
+    ``cfg.n_posts`` is not used. The CSV shares the Reddit Mental Health schema, so
+    the same columns / risk tiers apply. PII is still scrubbed and empty/deleted
+    posts are dropped (they cannot be generated on)."""
+    try:
+        df = pd.read_csv(EN_DATASET, usecols=lambda c: c in USECOLS)
+    except UnicodeDecodeError:  # this export is Windows-1252, not UTF-8
+        df = pd.read_csv(EN_DATASET, usecols=lambda c: c in USECOLS, encoding="cp1252")
+    df = df.dropna(subset=["post"])
+    df = df[~df["post"].astype(str).str.strip().str.lower().isin(DELETED)].copy()
+    df["post_clean"] = df["post"].map(lambda t: scrub(_fix_text(t)))
+    df["wc"] = df["post_clean"].str.split().map(len)
+    df = df[df["wc"] > 0].reset_index(drop=True)
+    df["risk_tier"] = df.apply(risk_tier_row, axis=1)
+    for col in ("suicidality_total", "sent_compound"):
+        if col not in df.columns:
+            df[col] = 0
+    df["post_id"] = ["p%03d" % i for i in range(len(df))]
+    return df[["post_id", "subreddit", "risk_tier", "wc",
+               "suicidality_total", "sent_compound", "post_clean"]]
