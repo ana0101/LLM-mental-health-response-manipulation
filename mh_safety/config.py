@@ -71,14 +71,14 @@ def qwen_llm(**overrides) -> LLMConfig:
     return hf_llm(**base)
 
 
-def mistral_judge_llm(**overrides) -> LLMConfig:
-    """The shared judge: Mistral-7B-Instruct-v0.3 via HuggingFace transformers.
-
-    Used to score *every* model's responses (both studies), so all models are
-    evaluated by the same independent judge rather than judging themselves.
-    Judgments are cached separately under ``.llm_cache/judge/``."""
-    base = dict(model="mistralai/Mistral-7B-Instruct-v0.3", cache_dir=".llm_cache/judge",
-                judge_max_new_tokens=256)
+def default_judge_llm(model="microsoft/phi-4", **overrides) -> LLMConfig:
+    """The shared judge (scores *every* model's responses, both studies) via HuggingFace
+    transformers. It is deliberately a model *outside* the generation backends
+    (Claude / Llama / Gemma / Qwen), so no model grades itself or its own family.
+    Default: Phi-4 (Microsoft, 14B) -- strong instruction/JSON following, ungated (MIT),
+    fits a Colab T4 in 4-bit. Judgments are cached under ``.llm_cache/judge/``.
+    Swap models via ``default_judge_llm("mistralai/Mistral-Small-Instruct-2409")`` etc."""
+    base = dict(model=model, cache_dir=".llm_cache/judge", judge_max_new_tokens=256)
     base.update(overrides)
     return hf_llm(**base)
 
@@ -98,7 +98,7 @@ class EmpathyConfig:
     out_dir: str = "outputs/anthropic/empathy"
     seed: int = 7
     llm: LLMConfig = field(default_factory=LLMConfig)             # generates responses
-    judge_llm: LLMConfig = field(default_factory=mistral_judge_llm)  # scores responses (shared)
+    judge_llm: LLMConfig = field(default_factory=default_judge_llm)  # scores responses (shared)
 
     @classmethod
     def ollama(cls, **overrides):
@@ -129,7 +129,7 @@ class RoleIntentConfig:
     out_dir: str = "outputs/anthropic/role_intent"
     seed: int = 11
     llm: LLMConfig = field(default_factory=LLMConfig)             # generates responses
-    judge_llm: LLMConfig = field(default_factory=mistral_judge_llm)  # scores responses (shared)
+    judge_llm: LLMConfig = field(default_factory=default_judge_llm)  # scores responses (shared)
 
     @classmethod
     def ollama(cls, **overrides):

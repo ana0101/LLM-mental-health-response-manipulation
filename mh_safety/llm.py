@@ -14,7 +14,7 @@ _JUDGE_CLIENTS = {}
 
 def judge_client(llm_cfg):
     """Return a cached client for the shared judge model, so the judge (e.g. the
-    local Mistral-7B) is loaded once and reused to score every backend's responses."""
+    local Qwen2.5-7B) is loaded once and reused to score every backend's responses."""
     key = (llm_cfg.backend, llm_cfg.model_judge, llm_cfg.cache_dir)
     client = _JUDGE_CLIENTS.get(key)
     if client is None:
