@@ -71,16 +71,23 @@ def qwen_llm(**overrides) -> LLMConfig:
     return hf_llm(**base)
 
 
-def default_judge_llm(model="microsoft/phi-4", **overrides) -> LLMConfig:
-    """The shared judge (scores *every* model's responses, both studies) via HuggingFace
-    transformers. It is deliberately a model *outside* the generation backends
-    (Claude / Llama / Gemma / Qwen), so no model grades itself or its own family.
-    Default: Phi-4 (Microsoft, 14B) -- strong instruction/JSON following, ungated (MIT),
-    fits a Colab T4 in 4-bit. Judgments are cached under ``.llm_cache/judge/``.
-    Swap models via ``default_judge_llm("mistralai/Mistral-Small-Instruct-2409")`` etc."""
-    base = dict(model=model, cache_dir=".llm_cache/judge", judge_max_new_tokens=256)
+def openai_llm(model="gpt-5", **overrides) -> LLMConfig:
+    """LLMConfig for an OpenAI model via the API. Requires ``OPENAI_API_KEY``."""
+    base = dict(backend="openai", model_generation=model, model_judge=model, cache_dir=".llm_cache/openai")
     base.update(overrides)
-    return hf_llm(**base)
+    return LLMConfig(**base)
+
+
+def default_judge_llm(model="gpt-5", **overrides) -> LLMConfig:
+    """The shared judge (scores *every* model's responses, both studies): **OpenAI GPT-5**
+    via the API, using structured outputs so it always returns valid schema-matching JSON
+    (including enum fields). It is independent of every generation backend
+    (Claude / Llama / Gemma / Qwen) -- no model grades itself -- and needs no local GPU.
+    Requires ``OPENAI_API_KEY``; judgments are cached under ``.llm_cache/judge/``.
+    Swap models via ``default_judge_llm("gpt-5-mini")`` (cheaper) or ``"gpt-4.1"``."""
+    base = dict(model=model, cache_dir=".llm_cache/judge")
+    base.update(overrides)
+    return openai_llm(**base)
 
 
 @dataclass

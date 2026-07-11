@@ -32,7 +32,7 @@ def generate_responses(cfg, sample_df, client):
 
 def judge_responses(cfg, responses_df, sample_df, judge=None):
     posts = dict(zip(sample_df.post_id, sample_df.post_clean))
-    judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: Qwen2.5-7B)
+    judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: OpenAI GPT-5)
     judge_system, judge_schema = J.spec(cfg.judge_llm.backend)
     recs, n_fail = [], 0
     for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging"):

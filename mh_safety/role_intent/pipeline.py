@@ -28,7 +28,7 @@ def generate_responses(cfg, prompts_df, client):
 
 
 def judge_responses(cfg, responses_df, judge=None):
-    judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: Qwen2.5-7B)
+    judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: OpenAI GPT-5)
     recs, n_fail = [], 0
     for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging"):
         try:

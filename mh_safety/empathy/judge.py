@@ -68,10 +68,11 @@ JUDGE_SCHEMA_COMPACT = {
 
 
 def spec(backend):
-    """Return the (system, schema) pair for the empathy judge. Local backends
-    (``ollama``, ``hf``) get the compact-JSON variant so small models reliably
-    return valid JSON; the ``anthropic`` API keeps the default variant."""
-    if backend == "anthropic":
+    """Return the (system, schema) pair for the empathy judge. API backends with
+    structured outputs (``anthropic``, ``openai``) use the full rubric/schema; local
+    backends (``ollama``, ``hf``) get the compact-JSON variant so small models
+    reliably return valid, short JSON."""
+    if backend in ("anthropic", "openai"):
         return JUDGE_SYSTEM, JUDGE_SCHEMA
     return JUDGE_SYSTEM_COMPACT, JUDGE_SCHEMA_COMPACT
 

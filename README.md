@@ -30,19 +30,18 @@ The same four selectors exist on `RoleIntentConfig`. Each backend caches its gen
 
 ## Judge (shared across all models)
 
-Responses are **not** self-graded. A single fixed judge — `mistralai/Mistral-7B-Instruct-v0.3` (local, via
-HuggingFace `transformers`) — scores every model's replies on the study rubric and returns structured JSON.
-It is set on `cfg.judge_llm` (the same default for every backend), loaded once per session, and its judgments
-are cached under `.llm_cache/judge/`. Because the judge is local, **you need `transformers` + `torch` (GPU
-recommended) and the Mistral weights regardless of the generation backend** — even when generating via the
-Anthropic API.
+Responses are **not** self-graded. A single fixed judge — **OpenAI GPT-5** (via the API) — scores every
+model's replies on the study rubric using **structured outputs**, so it always returns valid schema-matching
+JSON (including enum fields like `behavior`). It is set on `cfg.judge_llm` (the same default for every
+backend), is independent of every generation model (Claude/Llama/Gemma/Qwen), and its judgments are cached
+under `.llm_cache/judge/`. It needs `OPENAI_API_KEY` but **no local GPU** — so with Anthropic/Ollama
+generation the whole study runs on a laptop.
 
-Override the judge per run, e.g. to pass a token for the gated Mistral weights:
+Override the judge per run, e.g. a cheaper model:
 
 ```python
-import os
-from mh_safety.config import EmpathyConfig, mistral_judge_llm
-cfg = EmpathyConfig.gemma(judge_llm=mistral_judge_llm(hf_token=os.getenv("hf_read")))
+from mh_safety.config import EmpathyConfig, default_judge_llm
+cfg = EmpathyConfig(judge_llm=default_judge_llm("gpt-5-mini"))   # or "gpt-4.1"
 ```
 
 ## Layout
@@ -54,7 +53,8 @@ mh_safety/                 shared package
   _base_client.py          shared on-disk cache (CachingClient)
   _anthropic_client.py     Anthropic API backend
   _ollama_client.py        local Ollama backend
-  _hf_client.py            HuggingFace transformers backend (Gemma/Qwen generation + Mistral judge)
+  _hf_client.py            local HuggingFace transformers backend (Gemma/Qwen generation)
+  _openai_client.py        OpenAI API backend (the shared GPT-5 judge; structured outputs)
   text.py                  PII scrub, VADER, lexical metrics
   stats.py                 cohen_d, paired tests, risk ratio, chi-square
   visual.py                annotated heatmap
@@ -71,16 +71,17 @@ outputs/<backend>/<study>/ results + figures (anthropic|ollama|gemma|qwen × emp
 
 Each study's `pipeline.py` exposes step functions (`generate_responses`, `judge_responses`, `analyze`,
 `make_plots`, `save_results`) plus a one-call `run(cfg, show=True)`. Generation uses the backend client;
-`judge_responses` always uses the shared `cfg.judge_llm` (Mistral).
+`judge_responses` always uses the shared `cfg.judge_llm` (OpenAI GPT-5).
 
 ## Running
 
 ```bash
 pip install -r requirements.txt
-pip install "transformers>=4.51.0" accelerate bitsandbytes torch   # for the Mistral judge (and HF generation)
+export OPENAI_API_KEY=sk-...          # the shared GPT-5 judge (always)
 export ANTHROPIC_API_KEY=sk-ant-...   # only if generating with the Anthropic backend
-# Generation deps: anthropic -> API key; ollama -> a running `ollama` server; gemma/qwen -> the HF stack above.
-# The judge always runs locally on GPU (Mistral-7B); Gemma and Mistral are gated on HF (accept + use a token).
+pip install "transformers>=4.51.0" accelerate bitsandbytes torch   # only to generate with gemma/qwen (GPU)
+# Generation deps: anthropic -> API key; ollama -> a running `ollama` server; gemma/qwen -> the HF stack + GPU.
+# The judge is the OpenAI API, so judging needs no local GPU.
 ```
 
 Open a study notebook, set `BACKEND` in its Setup cell, and Run All; or from Python:
@@ -99,7 +100,7 @@ python robustness_metrics.py outputs/gemma/empathy/scored_responses.csv
 
 ## Caveats
 
-A single automated judge (Mistral-7B) — independent of the models it grades, but still validate against human
+A single automated judge (OpenAI GPT-5) — independent of the models it grades, but still validate against human
 ratings and a second judge before strong claims. Pilot sample sizes. Everything runs offline against public
 data; generated replies are never sent to anyone. Committed outputs predate the shared judge, so re-running
 re-scores them.
