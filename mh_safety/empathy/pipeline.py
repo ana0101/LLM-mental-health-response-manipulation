@@ -34,9 +34,17 @@ def judge_responses(cfg, responses_df, sample_df, judge=None):
     posts = dict(zip(sample_df.post_id, sample_df.post_clean))
     judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: Mistral-7B)
     judge_system, judge_schema = J.spec(cfg.judge_llm.backend)
-    recs = [judge.judge_json(judge_system, J.judge_prompt(posts[r.post_id], r.response), judge_schema)
-            for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging")]
-    return pd.concat([responses_df.reset_index(drop=True), pd.DataFrame(recs)], axis=1)
+    recs, n_fail = [], 0
+    for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging"):
+        try:
+            recs.append(judge.judge_json(judge_system, J.judge_prompt(posts[r.post_id], r.response), judge_schema))
+        except Exception:  # judge returned unparseable JSON -> skip this one response
+            recs.append({})
+            n_fail += 1
+    if n_fail:
+        print(f"[judge] {n_fail}/{len(responses_df)} responses could not be judged (invalid JSON); dropped.")
+    scored = pd.concat([responses_df.reset_index(drop=True), pd.DataFrame(recs)], axis=1)
+    return scored.dropna(subset=["empathy"]).reset_index(drop=True)
 
 
 def add_automated_metrics(scored_df, vader_fn=None):

@@ -29,9 +29,17 @@ def generate_responses(cfg, prompts_df, client):
 
 def judge_responses(cfg, responses_df, judge=None):
     judge = judge or judge_client(cfg.judge_llm)          # shared judge (default: Mistral-7B)
-    recs = [judge.judge_json(J.JUDGE_SYSTEM, J.judge_prompt(r.role, r.intent, r.prompt, r.response), J.JUDGE_SCHEMA)
-            for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging")]
+    recs, n_fail = [], 0
+    for r in tqdm(responses_df.itertuples(), total=len(responses_df), desc="judging"):
+        try:
+            recs.append(judge.judge_json(J.JUDGE_SYSTEM, J.judge_prompt(r.role, r.intent, r.prompt, r.response), J.JUDGE_SCHEMA))
+        except Exception:  # judge returned unparseable JSON -> skip this one response
+            recs.append({})
+            n_fail += 1
+    if n_fail:
+        print(f"[judge] {n_fail}/{len(responses_df)} responses could not be judged (invalid JSON); dropped.")
     scored = pd.concat([responses_df.reset_index(drop=True), pd.DataFrame(recs)], axis=1)
+    scored = scored.dropna(subset=["harmful"]).reset_index(drop=True)
     scored["harmful"] = scored["harmful"].astype(int)
     return scored
 

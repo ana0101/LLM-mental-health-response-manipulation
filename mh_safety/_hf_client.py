@@ -70,17 +70,19 @@ class HFClient(CachingClient):
                 )
         return f"System:\n{system or ''}\n\nUser:\n{user}\n\nAssistant:\n"
 
-    def _run(self, prompt, max_new_tokens):
+    def _run(self, prompt, max_new_tokens, do_sample=None, temperature=None, seed=None):
         torch = self._torch
         tokenizer, model = self._tokenizer, self._model
+        do_sample = self.cfg.do_sample if do_sample is None else do_sample
+        temperature = self.cfg.temperature if temperature is None else temperature
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
                            max_length=self.cfg.max_input_tokens).to(next(model.parameters()).device)
-        kwargs = dict(**inputs, max_new_tokens=max_new_tokens, do_sample=self.cfg.do_sample,
+        kwargs = dict(**inputs, max_new_tokens=max_new_tokens, do_sample=do_sample,
                       repetition_penalty=self.cfg.repetition_penalty,
                       pad_token_id=tokenizer.pad_token_id, eos_token_id=tokenizer.eos_token_id)
-        if self.cfg.do_sample:
-            self._set_seed(self.cfg.seed)
-            kwargs.update(temperature=self.cfg.temperature, top_p=self.cfg.top_p)
+        if do_sample:
+            self._set_seed(self.cfg.seed if seed is None else seed)
+            kwargs.update(temperature=temperature, top_p=self.cfg.top_p)
         with torch.inference_mode():
             output_ids = model.generate(**kwargs)
         new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
@@ -126,9 +128,16 @@ class HFClient(CachingClient):
 
         prompt = self._chat_prompt(system, user)
         last_error = None
-        # a second attempt with a larger budget only if the first JSON is incomplete
-        for token_budget in (base_tokens, base_tokens * 2):
-            raw = self._run(prompt, token_budget)
+        attempts = max(1, getattr(self.cfg, "judge_max_attempts", 6))
+        # Attempt 0: greedy. Attempt 1: greedy with 2x tokens (fixes truncation).
+        # Later attempts: sample with rising temperature so the output actually differs
+        # (repeating a greedy decode would just reproduce the same non-JSON text).
+        for i in range(attempts):
+            budget = base_tokens if i == 0 else base_tokens * 2
+            do_sample = i >= 2
+            temperature = min(0.3 + 0.2 * (i - 2), 0.9) if do_sample else 0.0
+            raw = self._run(prompt, budget, do_sample=do_sample, temperature=temperature,
+                            seed=self.cfg.seed + i)
             try:
                 obj = self._parse_json(raw)
             except ValueError as error:
@@ -136,7 +145,7 @@ class HFClient(CachingClient):
                 continue
             return self._cache_put(key, _coerce_to_schema(obj, schema))
 
-        raise RuntimeError(f"HF judge returned invalid JSON after two attempts: {last_error}")
+        raise RuntimeError(f"HF judge returned invalid JSON after {attempts} attempts: {last_error}")
 
 
 def _to_float(value):

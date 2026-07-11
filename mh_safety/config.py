@@ -30,6 +30,7 @@ class LLMConfig:
     # hf/transformers-only settings (ignored by other backends)
     max_new_tokens: int = 220
     judge_max_new_tokens: int = 220
+    judge_max_attempts: int = 6      # tries to get valid JSON from the judge before giving up
     max_input_tokens: int = 1024
     do_sample: bool = False
     temperature: float = 0.70
