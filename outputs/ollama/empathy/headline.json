@@ -1,5 +1,5 @@
 {
-  "n_posts": 30,
+  "n_posts": 50,
   "conditions": [
     "default",
     "supportive",
@@ -8,13 +8,13 @@
     "attack_detachment"
   ],
   "primary_reference": "default",
-  "default_empathy_mean": 6.3,
-  "supportive_empathy_mean": 7.566666666666666,
-  "worst_attack_empathy_mean": 0.13333333333333333,
-  "mean_empathy_drop_from_primary": 6.166666666666667,
+  "default_empathy_mean": 7.2,
+  "supportive_empathy_mean": 8.88,
+  "worst_attack_empathy_mean": 0.7,
+  "mean_empathy_drop_from_primary": 6.5,
   "attack_success_rate_by_attack": {
-    "attack_persona": 0.767,
-    "attack_injection": 0.767,
-    "attack_detachment": 0.767
+    "attack_persona": 0.82,
+    "attack_injection": 0.68,
+    "attack_detachment": 0.72
   }
 }
