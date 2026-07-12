@@ -35,8 +35,11 @@ OUT = Path("outputs/judge_validation")
 SCALE = 10                                 # rubric score range (0-10); flags use range 1
 BOOL_METRICS = {"danger_flag", "harmful"}
 SKIP_METRICS = {"behavior"}                # free-text label (after behaviour->behavior); not judged everywhere
-MODELS = {"anthropic", "ollama", "gemma", "qwen"}
-MODEL_ORDER = ["anthropic", "ollama", "gemma", "qwen"]
+BACKENDS = ["anthropic", "ollama", "gemma", "qwen"]     # folder keys under outputs/
+MODEL_NAMES = {"anthropic": "Claude Opus 4.8", "ollama": "Llama 3.1 8B",
+               "gemma": "Gemma 3 4B", "qwen": "Qwen3 4B"}
+MODEL_ORDER = [MODEL_NAMES[b] for b in BACKENDS]        # real model names for csvs + plots
+_BACKEND_OF = {v: k for k, v in MODEL_NAMES.items()}    # display name -> folder key (for safe filenames)
 METRIC_ORDER = {
     "empathy": ["empathy", "validation", "exploration", "safety", "danger_flag"],
     "role_intent": ["safety", "harmful", "validates_harm", "enabling", "accountability"],
@@ -120,7 +123,8 @@ def _blank_record(model, study, metric, mtype, n):
 # ----------------------------------------------------------------------------- per-file
 def _infer(path):
     parts = Path(path).parts
-    model = next((p for p in parts if p in MODELS), "unknown")
+    backend = next((p for p in parts if p in MODEL_NAMES), None)
+    model = MODEL_NAMES.get(backend, "unknown")
     study = "empathy" if "empathy" in parts else ("role_intent" if "role_intent" in parts else "unknown")
     return model, study
 
@@ -131,7 +135,8 @@ def process(path):
     gpt = {_norm(c[4:]): c for c in df.columns if c.lower().startswith("gpt_")}
     metrics = [m for m in hum if m in gpt and m not in SKIP_METRICS]
     model, study = _infer(path)
-    label = f"{model}_{study}"
+    slug = f"{_BACKEND_OF.get(model, 'unknown')}_{study}"     # safe filename stem
+    title = f"{model}  ·  {study.replace('_', ' ')}"          # real model name for plot titles
 
     records, paired_long = [], []
     numeric_pairs, bool_pairs = {}, {}
@@ -170,10 +175,10 @@ def process(path):
                 paired_long.append(dict(model=model, study=study, metric=m, human=xh, gpt=xg))
         records.append(rec)
 
-    _plot_scatter(numeric_pairs, {r["metric"]: r for r in records}, label)
-    _plot_confusion(bool_pairs, label)
+    _plot_scatter(numeric_pairs, {r["metric"]: r for r in records}, slug, study, title)
+    _plot_confusion(bool_pairs, slug, study, title)
     if paired_long:
-        pd.DataFrame(paired_long).to_csv(OUT / f"{label}_paired.csv", index=False)
+        pd.DataFrame(paired_long).to_csv(OUT / f"{slug}_paired.csv", index=False)
     return records
 
 
@@ -183,10 +188,9 @@ def _ordered(keys, study):
     return [m for m in order if m in keys] + [m for m in keys if m not in order]
 
 
-def _plot_scatter(pairs, recs, label):
+def _plot_scatter(pairs, recs, slug, study, title):
     if not pairs:
         return
-    study = label.split("_", 1)[1] if "_" in label else ""
     keys = _ordered(pairs, study)
     n = len(keys)
     ncol = min(3, n)
@@ -206,17 +210,16 @@ def _plot_scatter(pairs, recs, label):
         ax.set_title(f"{m}   (n={r['n']})\nagreement={r['agreement']:.2f}", fontsize=9)
     for ax in axes.flat[n:]:
         ax.axis("off")
-    fig.suptitle(f"{label.replace('_', ' ')}  —  human vs GPT judge (0–10 scores)",
+    fig.suptitle(f"{title}  —  human vs GPT judge (0–10 scores)",
                  fontweight="bold", fontsize=12)
     fig.tight_layout()
-    fig.savefig(OUT / f"{label}_scatter.png", dpi=140, bbox_inches="tight")
+    fig.savefig(OUT / f"{slug}_scatter.png", dpi=140, bbox_inches="tight")
     plt.close(fig)
 
 
-def _plot_confusion(pairs, label):
+def _plot_confusion(pairs, slug, study, title):
     if not pairs:
         return
-    study = label.split("_", 1)[1] if "_" in label else ""
     keys = _ordered(pairs, study)
     n = len(keys)
     fig, axes = plt.subplots(1, n, figsize=(4.6 * n, 4.3), squeeze=False)
@@ -240,10 +243,10 @@ def _plot_confusion(pairs, label):
                     ax.text(j, i, int(mat[i, j]), ha="center", va="center", fontsize=9,
                             color="white" if mat[i, j] > mat.max() * 0.6 else "#333")
         ax.set_title(f"{m}   (n={int(mat.sum())})", fontsize=10)
-    fig.suptitle(f"{label.replace('_', ' ')}  —  human vs GPT judge (confusion)",
+    fig.suptitle(f"{title}  —  human vs GPT judge (confusion)",
                  fontweight="bold", fontsize=12)
     fig.tight_layout()
-    fig.savefig(OUT / f"{label}_confusion.png", dpi=140, bbox_inches="tight")
+    fig.savefig(OUT / f"{slug}_confusion.png", dpi=140, bbox_inches="tight")
     plt.close(fig)
 
 

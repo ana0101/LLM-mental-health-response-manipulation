@@ -130,17 +130,36 @@ def make_plots(cfg, scored_df, A, show=False):
                "sycophantic_validation": "#e67e22", "enabling_howto": "#c0392b",
                "dismissive": "#7f3f98", "other": "#95a5a6"}
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    annotated_heatmap(axes[0, 0], A["harm_pivot"], "P(harmful) by role x intent", fig, vmax=1.0, fmt="{:.2f}")
-    annotated_heatmap(axes[0, 1], A["safe_pivot"], "mean safety by role x intent", fig, vmax=10.0, fmt="{:.1f}")
+    paths, figs = [], []
 
+    def _finish(fig, name):
+        fig.tight_layout()
+        p = out / name
+        fig.savefig(p, dpi=120)
+        paths.append(p); figs.append(fig)
+
+    # 1. P(harmful) heatmap
+    fig, ax = plt.subplots(figsize=(7, 5))
+    annotated_heatmap(ax, A["harm_pivot"], "P(harmful) by role x intent", fig, vmax=1.0, fmt="{:.2f}")
+    _finish(fig, "role_intent_harm_heatmap.png")
+
+    # 2. mean safety heatmap
+    fig, ax = plt.subplots(figsize=(7, 5))
+    annotated_heatmap(ax, A["safe_pivot"], "mean safety by role x intent", fig, vmax=10.0, fmt="{:.1f}")
+    _finish(fig, "role_intent_safety_heatmap.png")
+
+    # 3. harm probability by intent, split by role
+    fig, ax = plt.subplots(figsize=(7, 5))
     x = np.arange(len(INTENTS)); w = 0.38
     for k, role in enumerate(ROLES):
-        axes[1, 0].bar(x + (k - 0.5) * w, [A["harm_pivot"].loc[role, it] for it in INTENTS], w, label=role)
-    axes[1, 0].set_xticks(x); axes[1, 0].set_xticklabels(INTENTS, rotation=10)
-    axes[1, 0].set_ylim(0, 1); axes[1, 0].set_ylabel("P(harmful)")
-    axes[1, 0].set_title("Harm probability by intent, split by role"); axes[1, 0].legend()
+        ax.bar(x + (k - 0.5) * w, [A["harm_pivot"].loc[role, it] for it in INTENTS], w, label=role)
+    ax.set_xticks(x); ax.set_xticklabels(INTENTS, rotation=10)
+    ax.set_ylim(0, 1); ax.set_ylabel("P(harmful)")
+    ax.set_title("Harm probability by intent, split by role"); ax.legend()
+    _finish(fig, "role_intent_harm_by_intent.png")
 
+    # 4. behaviour mix per cell
+    fig, ax = plt.subplots(figsize=(8, 5))
     cells = [f"{r} / {i}" for r in ROLES for i in INTENTS]
     comp = (df.assign(behavior=pd.Categorical(df.behavior, categories=BEHAVIORS))
               .pivot_table(index="cell", columns="behavior", values="uid", aggfunc="count", observed=False)
@@ -149,18 +168,19 @@ def make_plots(cfg, scored_df, A, show=False):
     bottom = np.zeros(len(cells))
     for b in BEHAVIORS:
         if b in comp.columns:
-            axes[1, 1].bar(range(len(cells)), comp[b].values, bottom=bottom, color=BCOLORS[b], label=b)
+            ax.bar(range(len(cells)), comp[b].values, bottom=bottom, color=BCOLORS[b], label=b)
             bottom += comp[b].values
-    axes[1, 1].set_xticks(range(len(cells))); axes[1, 1].set_xticklabels(cells, rotation=25, ha="right")
-    axes[1, 1].set_ylim(0, 1); axes[1, 1].set_title("What the model does (behaviour mix per cell)")
-    axes[1, 1].legend(fontsize=7, ncol=2, loc="lower center")
-    fig.tight_layout()
-    p = out / "role_intent_safety.png"; fig.savefig(p, dpi=120)
+    ax.set_xticks(range(len(cells))); ax.set_xticklabels(cells, rotation=25, ha="right")
+    ax.set_ylim(0, 1); ax.set_title("What the model does (behaviour mix per cell)")
+    ax.legend(fontsize=7, ncol=2, loc="lower center")
+    _finish(fig, "role_intent_behavior_mix.png")
+
     if show:
         plt.show()
     else:
-        plt.close(fig)
-    return [p]
+        for fig in figs:
+            plt.close(fig)
+    return paths
 
 
 def save_results(cfg, scored_df, A):
