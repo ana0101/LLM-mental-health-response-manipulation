@@ -1,6 +1,7 @@
 """End-to-end role x intent safety pipeline (generate -> judge -> analyze ->
 plot -> save). Each step is a function so notebooks stay thin."""
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
 from tqdm.auto import tqdm
 
+from ..config import model_display_name
 from ..llm import LLMClient, judge_client
 from ..stats import risk_ratio, chi2_p
 from ..visual import annotated_heatmap
@@ -131,22 +133,24 @@ def make_plots(cfg, scored_df, A, show=False):
                "dismissive": "#7f3f98", "other": "#95a5a6"}
 
     paths, figs = [], []
+    mname = model_display_name(cfg.llm)                       # e.g. "Claude Opus 4.8"
+    fslug = re.sub(r'[^\w.\- ]+', '_', mname).strip()         # safe filename fragment
 
-    def _finish(fig, name):
+    def _finish(fig, stem):
         fig.tight_layout()
-        p = out / name
+        p = out / f"{fslug} - {stem}.png"
         fig.savefig(p, dpi=120)
         paths.append(p); figs.append(fig)
 
     # 1. P(harmful) heatmap
     fig, ax = plt.subplots(figsize=(7, 5))
-    annotated_heatmap(ax, A["harm_pivot"], "P(harmful) by role x intent", fig, vmax=1.0, fmt="{:.2f}")
-    _finish(fig, "role_intent_harm_heatmap.png")
+    annotated_heatmap(ax, A["harm_pivot"], f"{mname}: P(harmful) by role x intent", fig, vmax=1.0, fmt="{:.2f}")
+    _finish(fig, "role_intent_harm_heatmap")
 
     # 2. mean safety heatmap
     fig, ax = plt.subplots(figsize=(7, 5))
-    annotated_heatmap(ax, A["safe_pivot"], "mean safety by role x intent", fig, vmax=10.0, fmt="{:.1f}")
-    _finish(fig, "role_intent_safety_heatmap.png")
+    annotated_heatmap(ax, A["safe_pivot"], f"{mname}: mean safety by role x intent", fig, vmax=10.0, fmt="{:.1f}")
+    _finish(fig, "role_intent_safety_heatmap")
 
     # 3. harm probability by intent, split by role
     fig, ax = plt.subplots(figsize=(7, 5))
@@ -155,8 +159,8 @@ def make_plots(cfg, scored_df, A, show=False):
         ax.bar(x + (k - 0.5) * w, [A["harm_pivot"].loc[role, it] for it in INTENTS], w, label=role)
     ax.set_xticks(x); ax.set_xticklabels(INTENTS, rotation=10)
     ax.set_ylim(0, 1); ax.set_ylabel("P(harmful)")
-    ax.set_title("Harm probability by intent, split by role"); ax.legend()
-    _finish(fig, "role_intent_harm_by_intent.png")
+    ax.set_title(f"{mname}: harm probability by intent, split by role"); ax.legend()
+    _finish(fig, "role_intent_harm_by_intent")
 
     # 4. behaviour mix per cell
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -171,9 +175,9 @@ def make_plots(cfg, scored_df, A, show=False):
             ax.bar(range(len(cells)), comp[b].values, bottom=bottom, color=BCOLORS[b], label=b)
             bottom += comp[b].values
     ax.set_xticks(range(len(cells))); ax.set_xticklabels(cells, rotation=25, ha="right")
-    ax.set_ylim(0, 1); ax.set_title("What the model does (behaviour mix per cell)")
+    ax.set_ylim(0, 1); ax.set_title(f"{mname}: what the model does")
     ax.legend(fontsize=7, ncol=2, loc="lower center")
-    _finish(fig, "role_intent_behavior_mix.png")
+    _finish(fig, "role_intent_behavior_mix")
 
     if show:
         plt.show()

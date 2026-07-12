@@ -41,6 +41,21 @@ class LLMConfig:
     hf_token: Optional[str] = None
 
 
+# friendly display names for the generation models (used in figure titles / filenames)
+MODEL_DISPLAY = {
+    "claude-opus-4-8": "Claude Opus 4.8",
+    "llama3.1:8b": "Llama 3.1 8B",
+    "google/gemma-3-4b-it": "Gemma 3 4B",
+    "Qwen/Qwen3-4B": "Qwen3 4B",
+}
+
+
+def model_display_name(llm_cfg) -> str:
+    """Human-readable name of the generation model, e.g. 'Claude Opus 4.8'."""
+    raw = getattr(llm_cfg, "model_generation", "") or ""
+    return MODEL_DISPLAY.get(raw, raw.split("/")[-1] or "model")
+
+
 def ollama_llm(**overrides) -> LLMConfig:
     """LLMConfig with the local Ollama defaults (llama3.1:8b)."""
     base = dict(backend="ollama", model_generation="llama3.1:8b",
